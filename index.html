@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A/B Test Sample Size Calculator</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #1e293b;
+            --border: #e2e8f0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            padding: 2rem;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 { text-align: center; margin-bottom: 2rem; color: var(--primary); }
+       
+        .card {
+            background: var(--card);
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            border: 1px solid var(--border);
+        }
+
+        .section { margin-bottom: 1.5rem; }
+       
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .helper-text {
+            font-size: 0.875rem;
+            color: #64748b;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+
+        select, input {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            font-size: 1rem;
+            box-sizing: border-box; /* Ensures padding doesn't break width */
+        }
+
+        button {
+            width: 100%;
+            background-color: var(--primary);
+            color: white;
+            padding: 1rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover { background-color: #1d4ed8; }
+
+        #results {
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background-color: #eff6ff;
+            border-radius: 8px;
+            border: 1px solid #bfdbfe;
+            display: none; /* Hidden by default */
+        }
+
+        .result-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary);
+            display: block;
+            margin-top: 0.5rem;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>A/B Test Calculator</h1>
+
+    <div class="card">
+        <div class="section">
+            <label>1. What kind of metric are you testing?</label>
+            <small class="helper-text">
+                <strong>Proportions:</strong> Yes/No actions (e.g., Conversion Rate, Click Rate).<br>
+                <strong>Means:</strong> Continuous numbers (e.g., Average Order Value, Time on Site).
+            </small>
+            <select id="testType" onchange="toggleInputs()">
+                <option value="proportion">Proportions (Conversion Rate)</option>
+                <option value="mean">Means (Averages)</option>
+            </select>
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 2rem 0;">
+
+        <div id="proportionInputs">
+            <label>Current Conversion Rate (Baseline)</label>
+            <small class="helper-text">Your current performance. Enter as a decimal (e.g., 0.05 for 5%).</small>
+            <input type="number" id="prop-baseline" step="0.001" placeholder="0.05">
+
+            <label>Target Conversion Rate (Absolute)</label>
+            <small class="helper-text">
+                The <strong>total</strong> new rate you hope to reach.
+                <br> 
+                <em>Example: If your baseline is 0.05 (5%) and you want a 20% lift, do not enter 0.20. Enter <strong> 0.06</strong></small>
+            <input type="number" id="prop-target" step="0.001" placeholder="0.06">
+        </div>
+
+        <div id="meanInputs" style="display:none;">
+            <label>Current Average (Baseline Mean)</label>
+            <small class="helper-text">e.g., The average order value is $50.</small>
+            <input type="number" id="mean-baseline" step="0.1" placeholder="50">
+
+            <label>Desired New Average</label>
+            <small class="helper-text">e.g., You want to see it rise to $55.</small>
+            <input type="number" id="mean-target" step="0.1" placeholder="55">
+
+            <label>Standard Deviation</label>
+            <small class="helper-text">How much your data varies. If unknown, use a historical estimate.</small>
+            <input type="number" id="mean-sigma" step="0.1" placeholder="10">
+        </div>
+
+        <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 2rem 0;">
+
+       <div class="section">
+            <label>Advanced Statistical Settings</label>
+            <small class="helper-text">These control your risk tolerance. The defaults are industry standard.</small>
+           
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+                <div>
+                    <label style="font-size: 0.9rem">Significance (Alpha)</label>
+                    <input type="number" id="alpha" value="0.05" step="0.01">
+                </div>
+                <div>
+                    <label style="font-size: 0.9rem">Power (1 - Beta)</label>
+                    <input type="number" id="power" value="0.80" step="0.01">
+                </div>
+                <div>
+                    <label style="font-size: 0.9rem">Traffic Split (Kappa)</label>
+                    <input type="number" id="kappa" value="1" step="0.1">
+                </div>
+            </div>
+           
+            <div style="margin-top: 1rem; background: #f1f5f9; padding: 1rem; border-radius: 8px; font-size: 0.85rem; color: #475569;">
+                <p style="margin-bottom: 0.5rem;">
+                    <strong>Significance (Alpha) = "False Alarm Rate"</strong><br>
+                    This is the risk of thinking you won when you actually didn't (False Positive).
+                    <br>0.05 means you accept a 5% chance of a false alarm.
+                </p>
+                <p style="margin-bottom: 0.5rem;">
+                    <strong>Power = "Detection Rate"</strong><br>
+                    This is your ability to spot a winner if it exists.
+                    <br>0.80 means if your new design really works, this test will catch it 80% of the time (and miss it 20% of the time).
+                </p>
+                <p style="margin-bottom: 0;">
+                    <strong>Traffic Split (Kappa)</strong><br>
+                    How you divide users. Leave at <strong>1</strong> for a standard 50/50 A/B test.
+                </p>
+            </div>
+        </div>
+        <button onclick="calculate()">Calculate Sample Size</button>
+
+        <div id="results">
+            <div style="text-align: center;">
+                <span>You need approximately:</span>
+                <span class="result-number" id="resultValue">0</span>
+                <span>visitors <strong>per variation</strong>.</span>
+                <br><br>
+                <small id="totalTraffic"></small>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 1. UI Logic: Toggle between Means and Proportions
+        function toggleInputs() {
+            const type = document.getElementById('testType').value;
+            if (type === 'proportion') {
+                document.getElementById('proportionInputs').style.display = 'block';
+                document.getElementById('meanInputs').style.display = 'none';
+            } else {
+                document.getElementById('proportionInputs').style.display = 'none';
+                document.getElementById('meanInputs').style.display = 'block';
+            }
+            // Hide results when toggling
+            document.getElementById('results').style.display = 'none';
+        }
+
+        // 2. Math Logic: The "From Scratch" Statistics
+       
+        // We need an inverse normal distribution function (Percent Point Function)
+        // Since JS doesn't have scipy.stats, we use the Acklam approximation
+        // or a standard approximation commonly used in JS stats libraries.
+        function getZScore(p) {
+            // Approximation of the inverse cumulative normal distribution
+            // Source: Abramowitz and Stegun formula approximation
+            if (p < 0.5) return -getZScore(1 - p);
+           
+            const t = Math.sqrt(-2 * Math.log(1 - p));
+            const c0 = 2.515517;
+            const c1 = 0.802853;
+            const c2 = 0.010328;
+            const d1 = 1.432788;
+            const d2 = 0.189269;
+            const d3 = 0.001308;
+           
+            return t - ((c2 * t + c1) * t + c0) /
+                       (((d3 * t + d2) * t + d1) * t + 1);
+        }
+
+        function calculate() {
+            // Get Common Settings
+            const alpha = parseFloat(document.getElementById('alpha').value);
+            const power = parseFloat(document.getElementById('power').value);
+            const kappa = parseFloat(document.getElementById('kappa').value);
+            const type = document.getElementById('testType').value;
+
+            // Calculate Z-Scores
+            // For Alpha (Two-Tailed): We need Z for (1 - alpha/2)
+            const zAlpha = getZScore(1 - (alpha / 2));
+            // For Beta (One-Tailed Power): We need Z for Power (which is 1-beta)
+            const zBeta = getZScore(power);
+
+            let n = 0;
+
+            if (type === 'proportion') {
+                // --- PROPORTION MATH ---
+                const p1 = parseFloat(document.getElementById('prop-baseline').value);
+                const p2 = parseFloat(document.getElementById('prop-target').value);
+
+                if(!p1 || !p2) { alert("Please enter valid rates."); return; }
+
+                // Pooled Probability
+                const pAvg = (p1 + p2) / 2;
+               
+                // Pooled Variance (Approximation for sample size)
+                // Using standard formula: 2 * p_bar * (1 - p_bar)
+                const pooledVariance = 2 * pAvg * (1 - pAvg);
+               
+                // Formula: n = (2 * variance * (Zalpha + Zbeta)^2) / (p2 - p1)^2
+                const numerator = pooledVariance * Math.pow((zAlpha + zBeta), 2);
+                const denominator = Math.pow((p2 - p1), 2);
+               
+                n = numerator / denominator;
+
+            } else {
+                // --- MEANS MATH ---
+                const mu1 = parseFloat(document.getElementById('mean-baseline').value);
+                const mu2 = parseFloat(document.getElementById('mean-target').value);
+                const sigma = parseFloat(document.getElementById('mean-sigma').value);
+
+                if(!mu1 || !mu2 || !sigma) { alert("Please enter valid means/sigma."); return; }
+
+                // Formula: n = (1 + 1/kappa) * ( sigma * (Zalpha + Zbeta) / (mu1 - mu2) )^2
+                const numerator = sigma * (zAlpha + zBeta);
+                const denominator = mu1 - mu2;
+                const fraction = numerator / denominator;
+               
+                n = (1 + 1/kappa) * Math.pow(fraction, 2);
+            }
+
+            // Finalize Results
+            n = Math.ceil(n); // Always round up
+            const total = Math.ceil(n * (1 + 1/kappa)); // Total traffic
+
+            // Display
+            document.getElementById('results').style.display = 'block';
+            document.getElementById('resultValue').innerText = n.toLocaleString();
+            document.getElementById('totalTraffic').innerText = `Total participants required: ${total.toLocaleString()}`;
+        }
+    </script>
+</body>
+</html>
