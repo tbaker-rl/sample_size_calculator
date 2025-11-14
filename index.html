@@ -93,6 +93,45 @@
 
     <h1>A/B Test Calculator</h1>
 
+    <div class="card" style="background-color: #f8fafc; border-left: 5px solid var(--primary); margin-bottom: 2rem;">
+        <h2 style="margin-top: 0; font-size: 1.25rem; color: var(--primary);">Why do we need this calculator?</h2>
+        <p style="margin-bottom: 1rem; color: #475569;">
+            A/B testing is about separating <strong>signal</strong> (real behavior changes) from <strong>noise</strong> (random chance).
+            If we test too few people, a "win" might just be luck. If we test too many, we waste time and traffic.
+        </p>
+        <p style="margin-bottom: 0; color: #475569;">
+            This tool uses statistics to find the "Goldilocks" number: the exact sample size required to scientifically prove that a change is real, not random.
+        </p>
+
+        <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 1.5rem 0;">
+
+        <h3 style="margin-top: 0; font-size: 1.1rem;">Which metric type should I choose?</h3>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+            <div>
+                <strong style="color: var(--text);">1. Proportions (Yes/No Data)</strong>
+                <p style="font-size: 0.9rem; color: #64748b;">
+                    Use this when a user either <em>does</em> the action or <em>doesn't</em>. The data is binary.
+                </p>
+                <ul style="font-size: 0.9rem; color: #64748b; padding-left: 1.2rem;">
+                    <li><strong>Conversion Rate:</strong> Did they buy? (Yes/No)</li>
+                    <li><strong>Click-Through Rate:</strong> Did they click? (Yes/No)</li>
+                    <li><strong>Sign-up Rate:</strong> Did they register? (Yes/No)</li>
+                </ul>
+            </div>
+            <div>
+                <strong style="color: var(--text);">2. Means (Averages/Continuous)</strong>
+                <p style="font-size: 0.9rem; color: #64748b;">
+                    Use this when you are measuring <em>"how much"</em> or <em>"how long"</em>. The data is a specific number for each user.
+                </p>
+                <ul style="font-size: 0.9rem; color: #64748b; padding-left: 1.2rem;">
+                    <li><strong>Average Order Value:</strong> How much did they spend? ($50, $120...)</li>
+                    <li><strong>Time on Page:</strong> How long did they stay? (30s, 90s...)</li>
+                    <li><strong>Pages per Session:</strong> How many pages did they view?</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
     <div class="card">
         <div class="section">
             <label>1. What kind of metric are you testing?</label>
