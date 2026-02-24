@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AAP Funnel: Metric Definitions and Events</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 24px; color: #333; }
+    h1 { font-size: 1.75rem; margin-top: 0; border-bottom: 2px solid #ddd; padding-bottom: 8px; }
+    h2 { font-size: 1.25rem; margin-top: 28px; color: #222; }
+    p { margin: 12px 0; }
+    strong { font-weight: 600; }
+    hr { border: none; border-top: 1px solid #ddd; margin: 24px 0; }
+    ul { margin: 12px 0; padding-left: 24px; }
+    li { margin: 6px 0; }
+    code { background: #f4f4f4; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
+    table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 0.9rem; }
+    th, td { border: 1px solid #ddd; padding: 10px 12px; text-align: left; }
+    th { background: #f5f5f5; font-weight: 600; }
+    tr:nth-child(even) { background: #fafafa; }
+    .sub { font-size: 0.85rem; color: #666; margin-top: 8px; }
+  </style>
+</head>
+<body>
+
+<h1>AAP Funnel: Metric Definitions, Events, and Overcounting Rules</h1>
+
+<p>This document describes how each output metric is calculated in the AAP (Ask a Pro) funnel query, which events are used, and how we avoid overcounting or restrict counts.</p>
+
+<hr>
+
+<h2>1. Product interactions (first-touch)</h2>
+
+<p><strong>Definition:</strong> Count of distinct product interactions that are the <strong>first</strong> product touch for that user on that calendar day.</p>
+
+<p><strong>Events used (by product type):</strong></p>
+
+<table>
+  <thead>
+    <tr><th>Product type</th><th>Event</th><th>Source table</th><th>Filters / notes</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>Q&A</strong></td><td><code>COPILOT_CHAT_INPUT_SUBMITTED</code></td><td><code>PROD_LAKE.COPILOT_DW.COPILOT_ASK_COMBINED</code> (via <code>copilot_ask_combined_deduped</code>)</td><td><code>is_interview_qna = FALSE</code>, <code>user_id IS NOT NULL</code></td></tr>
+    <tr><td><strong>Uploaded Doc AI Insights Viewed</strong></td><td><code>AIINSIGHTS_FULL_VIEWED</code></td><td><code>prod_lake.p2s.events_s2</code> (via <code>ai_insights_events</code>)</td><td><code>source = 'uploaded'</code>, <code>to_date(event_date) >= '2024-08-22'</code></td></tr>
+    <tr><td><strong>RL Doc AI Insights Viewed</strong></td><td><code>AIINSIGHTS_FULL_VIEWED</code></td><td>Same</td><td><code>source = 'interview'</code> OR <code>source IS NULL</code>, <code>to_date(event_date) >= '2024-08-22'</code></td></tr>
+  </tbody>
+</table>
+
+<p><strong>How we avoid overcounting / restrict counts:</strong></p>
+<ul>
+  <li><strong>Deduplication at source:</strong> <strong>Q&A:</strong> <code>copilot_ask_combined_deduped</code> keeps one row per <code>(conversation_id, event_name)</code> per event (or per <code>(user_id, event_name, is_interview_qna)</code> for interview Q&A). So one “submit” per conversation. <strong>AI Insights:</strong> <code>ai_insights_events</code> dedupes by <code>event_instance_id</code> (one row per instance).</li>
+  <li><strong>First-touch attribution:</strong> Only interactions where <code>event_rank_per_user_day = 1</code> are counted. A user who does Q&A then AI Insights the same day is counted only once (in the product type of their first interaction).</li>
+  <li><strong>Output:</strong> The query groups by <code>date</code>, <code>product_type</code>, and <code>ask_a_pro_intent</code>; <code>product_interactions</code> is <code>COUNT(DISTINCT CASE WHEN event_rank_per_user_day = 1 THEN unique_id END)</code>.</li>
+</ul>
+
+<hr>
+
+<h2>2. Ask a Pro intent (flag: Yes/No)</h2>
+
+<p><strong>Definition:</strong> For each product interaction row, whether the user showed “Ask a Pro” intent <strong>on the same calendar day</strong> and <strong>after</strong> that product interaction.</p>
+
+<p><strong>Events used to define intent (by product type):</strong></p>
+
+<table>
+  <thead>
+    <tr><th>Product type</th><th>Intent events</th><th>Source</th><th>Logic</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>Q&A</strong></td><td><code>COPILOT_CONVERSATION_PATH_CHOSEN</code> with <code>conversation_paths_taken_type = 'Ask'</code></td><td><code>PROD_LAKE.COPILOT_DW.COPILOT_ASK_COMBINED</code></td><td>Same <code>conversation_id</code>; intent event <strong>after</strong> submit; <strong>same calendar day</strong>.</td></tr>
+    <tr><td><strong>Uploaded Doc AI Insights Viewed</strong></td><td><code>PRO_REVIEW_COPILOT_START</code>, <code>PRO_CONSULT_REQUESTED_START</code>, <code>PRO_CONSULT_REQUESTED_SUCCESS</code></td><td><code>prod_lake.p2s.events_s2</code> (via <code>ai_insights_events</code> → <code>metric_definitions_mvas</code>)</td><td>Same <code>user_id</code>; intent <strong>after</strong> <code>AIINSIGHTS_FULL_VIEWED</code>; <strong>same calendar day</strong>.</td></tr>
+    <tr><td><strong>RL Doc AI Insights Viewed</strong></td><td>Same as Uploaded Doc</td><td>Same</td><td>Same.</td></tr>
+  </tbody>
+</table>
+
+<p><strong>How we avoid overcounting / restrict counts:</strong></p>
+<ul>
+  <li><strong>One intent per product interaction:</strong> Deduped by earliest intent event per (user, product type, product interaction).</li>
+  <li><strong>Same-day only</strong> and <strong>intent after interaction</strong> for both Q&A and AI Insights.</li>
+</ul>
+
+<hr>
+
+<h2>3. Ask a Pro intent count</h2>
+
+<p><strong>Definition:</strong> Count of distinct <strong>first-touch</strong> product interactions where <code>has_ask_a_pro_intent = 'Yes'</code>.</p>
+<p>Only first-touch rows are counted; each user-day at most once in the product bucket of their first interaction.</p>
+
+<hr>
+
+<h2>4. GCR conversions</h2>
+
+<p><strong>Definition:</strong> Count of distinct users who had a <strong>gross conversion</strong> (GCR) on the same calendar day as their funnel event, with the conversion occurring <strong>after</strong> that funnel event. First-touch only; at most one conversion per user per interaction.</p>
+
+<p><strong>Events / source for conversions:</strong></p>
+<ul>
+  <li><strong>Source table:</strong> <code>prod_bi.metrics_definition.metric_definitions_gross_conversions_unagg</code></li>
+  <li><strong>Filters:</strong> <code>gross_conversions IS NOT NULL</code>, <code>product_category_rollup IN ('RL', 'RL+')</code></li>
+</ul>
+
+<p><strong>Funnel side:</strong> <code>funnel_event_date = COALESCE(intent_event_date, event_date)</code>. Conversion must be same calendar day and <code>g.event_date >= ca.funnel_event_date</code>.</p>
+
+<p><strong>How we avoid overcounting:</strong> One conversion per interaction (<code>gcr_rank_per_interaction = 1</code>); first-touch only; <code>COUNT(DISTINCT gcr_user_id)</code>.</p>
+
+<hr>
+
+<h2>5. Conversion rate (conversion_rate_pct)</h2>
+
+<p><strong>Definition:</strong> Among first-touch product interactions, the percentage that resulted in a GCR conversion.</p>
+<p><strong>Formula:</strong> <code>conversion_rate_pct = (gcr_conversions / product_interactions) * 100</code></p>
+
+<hr>
+
+<h2>6. Intent rate (intent_rate_pct)</h2>
+
+<p><strong>Definition:</strong> Among first-touch product interactions, the percentage where the user showed Ask a Pro intent.</p>
+<p><strong>Formula:</strong> <code>intent_rate_pct = (ask_a_pro_intent_count / product_interactions) * 100</code></p>
+
+<hr>
+
+<h2>7. GCR conversion rate of intent (gcr_conversion_rate_pct)</h2>
+
+<p><strong>Definition:</strong> Among first-touch product interactions <strong>with</strong> Ask a Pro intent, the percentage that resulted in a GCR conversion.</p>
+<p><strong>Formula:</strong> <code>gcr_conversion_rate_pct = (gcr_conversions / ask_a_pro_intent_count) * 100</code></p>
+
+<hr>
+
+<h2>Summary: Events and restrictions</h2>
+
+<table>
+  <thead>
+    <tr><th>Metric</th><th>Events (product)</th><th>Events (intent)</th><th>Events (conversion)</th><th>Main restrictions</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><strong>product_interactions</strong></td><td>COPILOT_CHAT_INPUT_SUBMITTED (Q&A); AIINSIGHTS_FULL_VIEWED (Uploaded/RL)</td><td>—</td><td>—</td><td>Source dedup; first-touch per user-day only</td></tr>
+    <tr><td><strong>ask_a_pro_intent</strong></td><td>(same as base)</td><td>PATH_CHOSEN Ask (Q&A); PRO_REVIEW_COPILOT_START, PRO_CONSULT_* (AI Insights)</td><td>—</td><td>Same-day, after interaction; one intent per (user, product_type, product_interaction_id)</td></tr>
+    <tr><td><strong>ask_a_pro_intent_count</strong></td><td>Same as product_interactions</td><td>Same as ask_a_pro_intent</td><td>—</td><td>First-touch only; distinct unique_id with intent Yes</td></tr>
+    <tr><td><strong>gcr_conversions</strong></td><td>Same (for funnel event)</td><td>Same (for funnel_event_date)</td><td>metric_definitions_gross_conversions_unagg (RL, RL+)</td><td>First-touch only; same day; conversion after funnel event; gcr_rank_per_interaction = 1; COUNT(DISTINCT gcr_user_id)</td></tr>
+    <tr><td><strong>conversion_rate_pct</strong></td><td>—</td><td>—</td><td>—</td><td>gcr_conversions / product_interactions (first-touch)</td></tr>
+    <tr><td><strong>intent_rate_pct</strong></td><td>—</td><td>—</td><td>—</td><td>ask_a_pro_intent_count / product_interactions (first-touch)</td></tr>
+    <tr><td><strong>gcr_conversion_rate_pct</strong></td><td>—</td><td>—</td><td>—</td><td>gcr_conversions / ask_a_pro_intent_count (first-touch)</td></tr>
+  </tbody>
+</table>
+
+<p>All metrics in the final output are grouped by <strong>date</strong>, <strong>product_type</strong>, and <strong>ask_a_pro_intent</strong> (Yes/No), and use <strong>first-touch attribution</strong> so that each user-day is attributed to at most one product type (the one they used first that day).</p>
+
+<p class="sub">AAP Funnel — Metric definitions and events. Open this file in any web browser.</p>
+
+</body>
+</html>
